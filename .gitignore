@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# PM2
+pm2.log
+pm2-dump.pm2
+.pm2/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+
+# Cache
+.cache/
+
+# Runtime data
+.env.production
+pids/
+*.pid
+*.seed
+*.pid.lock

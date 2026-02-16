@@ -1,0 +1,31 @@
+{
+  "name": "rivalis-live-engine",
+  "version": "1.0.0",
+  "description": "High-performance multiplayer fitness game WebSocket engine optimized for Android Termux",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo 'Tests would run here'"
+  },
+  "keywords": [
+    "fitness",
+    "multiplayer",
+    "game",
+    "websocket",
+    "android",
+    "termux"
+  ],
+  "author": "Rivalis Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "firebase-admin": "^12.0.0",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

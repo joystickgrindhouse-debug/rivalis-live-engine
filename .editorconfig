@@ -1,0 +1,33 @@
+# EditorConfig helps maintain consistent coding styles
+# See https://editorconfig.org
+
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# JavaScript/Node files
+[*.{js,json}]
+indent_style = space
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+indent_style = space
+indent_size = 2
+
+# YAML/Config
+[*.{yml,yaml,env*}]
+indent_style = space
+indent_size = 2
+
+# Shell scripts
+[*.sh]
+indent_style = space
+indent_size = 2
+end_of_line = lf

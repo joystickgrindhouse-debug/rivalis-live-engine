@@ -1,0 +1,42 @@
+{
+  "name": "rivalis-live-engine",
+  "version": "1.0.0",
+  "description": "High-performance multiplayer fitness game engine optimized for Android Termux",
+  "private": true,
+  "scripts": {
+    "setup:dev": "bash setup.sh dev",
+    "setup:prod": "bash setup.sh prod",
+    "setup:termux": "bash setup.sh termux",
+    "install-all": "cd live-server && npm install && cd ../discord-bot && npm install && cd ..",
+    "start:live": "cd live-server && npm start",
+    "start:bot": "cd discord-bot && npm start",
+    "test:api": "node API_TEST.js",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop all",
+    "pm2:restart": "pm2 restart all",
+    "pm2:logs": "pm2 logs",
+    "pm2:monit": "pm2 monit"
+  },
+  "keywords": [
+    "fitness",
+    "multiplayer",
+    "game",
+    "websocket",
+    "android",
+    "termux",
+    "node"
+  ],
+  "author": "Rivalis Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-repo/rivalis-live-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-repo/rivalis-live-engine/issues"
+  },
+  "homepage": "https://github.com/your-repo/rivalis-live-engine#readme"
+}

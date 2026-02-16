@@ -1,0 +1,19 @@
+ADD THIS IMPORT (around line 7, with other requires):
+
+const { registerLiveEngineSyncRoutes } = require("./replit_integrations/live-engine-sync");
+
+---
+
+ADD THIS BEFORE app.listen (around line 600):
+
+registerLiveEngineSyncRoutes(app);
+
+---
+
+EXAMPLE CONTEXT:
+registerChatRoutes(app);
+registerImageRoutes(app);
+registerLiveEngineSyncRoutes(app);
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
