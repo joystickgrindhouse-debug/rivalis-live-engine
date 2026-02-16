@@ -476,8 +476,8 @@
                     <div class="mode-icon">💥</div>
                 </div>
                 <div class="mode-description">Maximum chaos! Most powerful cards and tricks available.</div>
-                <div class="mode-details"> onclick="createSession('chaos', 'burpees')">Create Session</button>
-                    <button class="btn btn-secondary" onclick="showModeInfo('chaos')
+                <div class="mode-details">
+                    <div class="detail-item">
                         <span class="detail-label">Turn Time:</span>
                         <span class="detail-value">2:00</span>
                     </div>
@@ -495,8 +495,8 @@
                     </div>
                 </div>
                 <div class="mode-footer">
-                    <button class="btn btn-primary">Create Session</button>
-                    <button class="btn btn-secondary">Info</button>
+                    <button class="btn btn-primary" onclick="createSession('chaos', 'burpees')">Create Session</button>
+                    <button class="btn btn-secondary" onclick="showModeInfo('chaos')">Info</button>
                 </div>
             </div>
 
@@ -506,8 +506,8 @@
                     <div class="mode-icon">⚡</div>
                 </div>
                 <div class="mode-description">Quick rounds with 20-second turns. Fast-paced intense action.</div>
-                <div class="mode-details"> onclick="createSession('speed_demon', 'squats')">Create Session</button>
-                    <button class="btn btn-secondary" onclick="showModeInfo('speed_demon')
+                <div class="mode-details">
+                    <div class="detail-item">
                         <span class="detail-label">Turn Time:</span>
                         <span class="detail-value">0:20</span>
                     </div>
@@ -525,8 +525,8 @@
                     </div>
                 </div>
                 <div class="mode-footer">
-                    <button class="btn btn-primary">Create Session</button>
-                    <button class="btn btn-secondary">Info</button>
+                    <button class="btn btn-primary" onclick="createSession('speed_demon', 'squats')">Create Session</button>
+                    <button class="btn btn-secondary" onclick="showModeInfo('speed_demon')">Info</button>
                 </div>
             </div>
 
@@ -747,6 +747,8 @@
             });
             element.classList.add('active');
             console.log('Selected mode:', mode);
+        }
+
         async function createSession(gameMode, exerciseName) {
             showMessage('Creating session...', 'success');
             
@@ -797,7 +799,9 @@
         }
 
         // Load sessions on page load
-        window.addEventListener('DOMContentLoaded', loadActiveSessionsrval(() => {
+        window.addEventListener('DOMContentLoaded', loadActiveSessions);
+        
+        setInterval(() => {
             // Could update player count, session list, etc.
         }, 5000);
     </script>
