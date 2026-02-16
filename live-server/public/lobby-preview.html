@@ -256,6 +256,28 @@
 
         .player-info {
             flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .player-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+            color: white;
+            flex-shrink: 0;
+            border: 2px solid #ff0000;
+        }
+
+        .player-details {
+            flex: 1;
+            min-width: 0;
         }
 
         .player-name {
@@ -427,6 +449,165 @@
             0%, 80%, 100% { opacity: 0; }
             40% { opacity: 1; }
         }
+
+        /* Stretching Room Modal */
+        .stretching-room-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .stretching-room-overlay.active {
+            display: flex;
+        }
+
+        .stretching-room {
+            background: linear-gradient(135deg, #1a0000 0%, #2a0000 100%);
+            border: 3px solid #ff0000;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .stretching-room h2 {
+            font-size: 36px;
+            color: #ff0000;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .stretching-room .subtitle {
+            color: #aaaaaa;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .stretching-room .mode-badge {
+            display: inline-block;
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0000;
+            padding: 8px 20px;
+            border-radius: 20px;
+            color: #ff0000;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .discord-link-box {
+            background: rgba(88, 101, 242, 0.1);
+            border: 2px solid #5865F2;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+
+        .discord-link-box h3 {
+            color: #5865F2;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .discord-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: #5865F2;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 15px 0;
+            transition: all 0.3s;
+        }
+
+        .discord-link:hover {
+            background: #4752C4;
+            transform: scale(1.05);
+        }
+
+        .player-waiting {
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid #ff0000;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .player-waiting h4 {
+            color: #ff0000;
+            margin-bottom: 15px;
+        }
+
+        .waiting-players {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .waiting-player {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #ff0000;
+            border-radius: 8px;
+            padding: 10px 15px;
+            color: #ff0000;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .waiting-player-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            border: 1px solid #ff0000;
+        }
+
+        .stretching-animation {
+            font-size: 48px;
+            margin: 20px 0;
+            animation: stretch 2s infinite;
+        }
+
+        @keyframes stretch {
+            0%, 100% { transform: scaleY(1); }
+            50% { transform: scaleY(1.2); }
+        }
+
+        .close-btn {
+            background: rgba(139, 0, 0, 0.3);
+            color: #ff6666;
+            border: 1px solid #8b0000;
+            padding: 12px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+
+        .close-btn:hover {
+            background: rgba(139, 0, 0, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -465,8 +646,8 @@
                     </div>
                 </div>
                 <div class="mode-footer">
-                    <button class="btn btn-primary">Create Session</button>
-                    <button class="btn btn-secondary">Info</button>
+                    <button class="btn btn-primary" onclick="createSession('classic', 'pushups')">Create Session</button>
+                    <button class="btn btn-secondary" onclick="showModeInfo('classic')">Info</button>
                 </div>
             </div>
 
@@ -597,21 +778,30 @@
         <div class="players-section">
             <div class="section-title">👤 Your Profile</div>
 
+            <!-- User Profile Header -->
+            <div id="userProfileHeader" style="display: flex; align-items: center; gap: 15px; padding: 20px; background: rgba(255, 0, 0, 0.1); border: 1px solid #ff0000; border-radius: 8px; margin-bottom: 20px;">
+                <div id="userAvatar" class="player-avatar" style="width: 60px; height: 60px; font-size: 24px; background-color: #4ECDC4;">?</div>
+                <div style="flex: 1;">
+                    <div id="userName" style="font-size: 20px; font-weight: bold; color: #ff0000; margin-bottom: 5px;">Loading...</div>
+                    <div style="font-size: 12px; color: #aaaaaa;">Rivalis Hub Member</div>
+                </div>
+            </div>
+
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-value">247</div>
+                    <div class="stat-value" id="statTotalReps">0</div>
                     <div class="stat-label">Total Reps</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">8,340</div>
+                    <div class="stat-value" id="statTotalScore">0</div>
                     <div class="stat-label">Total Score</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">12</div>
+                    <div class="stat-value" id="statWins">0</div>
                     <div class="stat-label">Wins</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">450</div>
+                    <div class="stat-value" id="statRaffleTickets">0</div>
                     <div class="stat-label">Raffle Tickets</div>
                 </div>
             </div>
@@ -625,10 +815,13 @@
 
             <div class="player-item">
                 <div class="player-info">
-                    <div class="player-name">⚡ FitKing_92</div>
-                    <div class="player-stats">
-                        <span>🏆 78 wins</span>
-                        <span>🔥 1,234 reps</span>
+                    <div class="player-avatar" style="background-color: #4ECDC4;">FK</div>
+                    <div class="player-details">
+                        <div class="player-name">FitKing_92</div>
+                        <div class="player-stats">
+                            <span>🏆 78 wins</span>
+                            <span>🔥 1,234 reps</span>
+                        </div>
                     </div>
                 </div>
                 <div class="player-status">
@@ -639,10 +832,13 @@
 
             <div class="player-item">
                 <div class="player-info">
-                    <div class="player-name">💪 GrindGal_23</div>
-                    <div class="player-stats">
-                        <span>🏆 45 wins</span>
-                        <span>🔥 892 reps</span>
+                    <div class="player-avatar" style="background-color: #FF6B6B;">GG</div>
+                    <div class="player-details">
+                        <div class="player-name">GrindGal_23</div>
+                        <div class="player-stats">
+                            <span>🏆 45 wins</span>
+                            <span>🔥 892 reps</span>
+                        </div>
                     </div>
                 </div>
                 <div class="player-status">
@@ -653,10 +849,13 @@
 
             <div class="player-item">
                 <div class="player-info">
-                    <div class="player-name">🚀 SpeedDemon_7</div>
-                    <div class="player-stats">
-                        <span>🏆 156 wins</span>
-                        <span>🔥 3,456 reps</span>
+                    <div class="player-avatar" style="background-color: #FFA07A;">SD</div>
+                    <div class="player-details">
+                        <div class="player-name">SpeedDemon_7</div>
+                        <div class="player-stats">
+                            <span>🏆 156 wins</span>
+                            <span>🔥 3,456 reps</span>
+                        </div>
                     </div>
                 </div>
                 <div class="player-status">
@@ -667,10 +866,13 @@
 
             <div class="player-item">
                 <div class="player-info">
-                    <div class="player-name">🏃 QuickFit_99</div>
-                    <div class="player-stats">
-                        <span>🏆 34 wins</span>
-                        <span>🔥 567 reps</span>
+                    <div class="player-avatar" style="background-color: #98D8C8;">QF</div>
+                    <div class="player-details">
+                        <div class="player-name">QuickFit_99</div>
+                        <div class="player-stats">
+                            <span>🏆 34 wins</span>
+                            <span>🔥 567 reps</span>
+                        </div>
                     </div>
                 </div>
                 <div class="player-status">
@@ -740,7 +942,181 @@
         </div>
     </div>
 
+    <!-- Stretching Room Modal -->
+    <div class="stretching-room-overlay" id="stretchingRoom">
+        <div class="stretching-room">
+            <h2>🧘 Stretching Room</h2>
+            <p class="subtitle">Get ready to compete!</p>
+            
+            <div class="mode-badge" id="selectedMode">Loading...</div>
+            
+            <div class="discord-link-box">
+                <h3>🎮 Join Voice Chat</h3>
+                <a href="#" class="discord-link" id="discordLink" target="_blank">
+                    <span>🔊</span>
+                    <span>Join Discord VC</span>
+                </a>
+                <p style="color: #aaaaaa; font-size: 12px;">Connect with your opponents before the match</p>
+            </div>
+
+            <div class="stretching-animation">🤸‍♂️</div>
+
+            <div class="player-waiting">
+                <h4>Players Ready (1/4)</h4>
+                <div class="waiting-players" id="waitingPlayers">
+                    <div class="waiting-player">
+                        <div class="waiting-player-avatar" style="background-color: #4ECDC4;">YOU</div>
+                        You
+                    </div>
+                    <div class="waiting-player" style="opacity: 0.3;">
+                        <div class="waiting-player-avatar" style="background-color: #666;">?</div>
+                        Waiting...
+                    </div>
+                    <div class="waiting-player" style="opacity: 0.3;">
+                        <div class="waiting-player-avatar" style="background-color: #666;">?</div>
+                        Waiting...
+                    </div>
+                    <div class="waiting-player" style="opacity: 0.3;">
+                        <div class="waiting-player-avatar" style="background-color: #666;">?</div>
+                        Waiting...
+                    </div>
+                </div>
+            </div>
+
+            <p style="color: #aaaaaa; font-size: 13px; margin: 20px 0;">Share the link with friends or wait for players to join</p>
+
+            <button class="close-btn" onclick="closeStretchingRoom()">Leave Room</button>
+        </div>
+    </div>
+
     <script>
+        let lobbySocket = null;
+        let currentUserProfile = null;
+        
+        // Load user profile from Firebase
+        async function loadUserProfile() {
+            try {
+                // Get Firebase token from localStorage (set by your hub)
+                const firebaseToken = localStorage.getItem('firebaseToken') || localStorage.getItem('idToken');
+                
+                if (!firebaseToken) {
+                    console.warn('⚠️ No Firebase token found. User not authenticated.');
+                    showGuestProfile();
+                    return;
+                }
+                
+                const response = await fetch('/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${firebaseToken}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    console.error('Failed to load profile:', response.status);
+                    showGuestProfile();
+                    return;
+                }
+                
+                const profile = await response.json();
+                currentUserProfile = profile;
+                
+                // Update UI with profile data
+                displayUserProfile(profile);
+                
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                showGuestProfile();
+            }
+        }
+        
+        function displayUserProfile(profile) {
+            // Update avatar
+            const avatarEl = document.getElementById('userAvatar');
+            if (profile.avatar) {
+                avatarEl.innerHTML = `<img src="${profile.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" />`;
+            } else {
+                const initials = profile.username.substring(0, 2).toUpperCase();
+                avatarEl.textContent = initials;
+                avatarEl.style.backgroundColor = getColorFromString(profile.username);
+            }
+            
+            // Update username
+            document.getElementById('userName').textContent = profile.username;
+            
+            // Update stats
+            document.getElementById('statTotalReps').textContent = formatNumber(profile.stats.totalReps);
+            document.getElementById('statTotalScore').textContent = formatNumber(profile.stats.totalScore);
+            document.getElementById('statWins').textContent = profile.stats.wins;
+            document.getElementById('statRaffleTickets').textContent = formatNumber(profile.stats.raffleTickets);
+            
+            console.log('✅ Profile loaded:', profile.username);
+        }
+        
+        function showGuestProfile() {
+            document.getElementById('userName').textContent = 'Guest User';
+            document.getElementById('userAvatar').textContent = 'GU';
+            document.getElementById('userAvatar').style.backgroundColor = '#666';
+        }
+        
+        function getColorFromString(str) {
+            const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
+            const hash = str.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            return colors[hash % colors.length];
+        }
+        
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+        
+        // Connect to WebSocket for real-time lobby updates
+        function connectLobby() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}?type=lobby`;
+            
+            lobbySocket = new WebSocket(wsUrl);
+            
+            lobbySocket.onopen = () => {
+                console.log('✅ Connected to lobby');
+            };
+            
+            lobbySocket.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                console.log('📨 Lobby update:', message);
+                
+                if (message.type === 'sessions_list') {
+                    updateSessionsList(message.sessions);
+                } else if (message.type === 'session_created') {
+                    addSessionToList(message.session);
+                } else if (message.type === 'session_updated') {
+                    updateSessionInList(message.session);
+                }
+            };
+            
+            lobbySocket.onerror = (error) => {
+                console.error('❌ Lobby WebSocket error:', error);
+            };
+            
+            lobbySocket.onclose = () => {
+                console.log('📺 Disconnected from lobby, reconnecting in 3s...');
+                setTimeout(connectLobby, 3000);
+            };
+        }
+        
+        function updateSessionsList(sessions) {
+            console.log('Active sessions:', sessions);
+            // Could update the active sessions section in the UI
+        }
+        
+        function addSessionToList(session) {
+            console.log('New session:', session);
+        }
+        
+        function updateSessionInList(session) {
+            console.log('Updated session:', session);
+        }
+
         function selectMode(element, mode) {
             document.querySelectorAll('.game-mode').forEach(el => {
                 el.classList.remove('active');
@@ -762,16 +1138,58 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showMessage(`✅ Session Created! ID: ${data.sessionId}`, 'success');
                     console.log('Session created:', data);
-                    // Reload sessions list after 2 seconds
-                    setTimeout(loadActiveSessions, 2000);
+                    showMessage('', 'success');
+                    // Open stretching room with real Discord link
+                    openStretchingRoom(gameMode, data.sessionId, data.discordVC?.inviteLink);
                 } else {
                     showMessage(`❌ Error: ${data.error}`, 'error');
                 }
             } catch (error) {
                 showMessage(`❌ Failed to create session: ${error.message}`, 'error');
             }
+        }
+
+        function openStretchingRoom(gameMode, sessionId, discordLink) {
+            // Use real Discord link or fallback
+            const vcLink = discordLink || `https://discord.gg/rivalis`;
+            
+            // Update modal content
+            document.getElementById('selectedMode').textContent = gameMode.toUpperCase().replace('_', ' ');
+            document.getElementById('discordLink').href = vcLink;
+            
+            // Update waiting players with user's avatar
+            const waitingPlayersEl = document.getElementById('waitingPlayers');
+            const userColor = currentUserProfile ? getColorFromString(currentUserProfile.username) : '#4ECDC4';
+            const userInitials = currentUserProfile ? currentUserProfile.username.substring(0, 2).toUpperCase() : 'YOU';
+            const userName = currentUserProfile ? currentUserProfile.username : 'You';
+            
+            waitingPlayersEl.innerHTML = `
+                <div class="waiting-player">
+                    <div class="waiting-player-avatar" style="background-color: ${userColor};">${userInitials}</div>
+                    ${userName}
+                </div>
+                <div class="waiting-player" style="opacity: 0.3;">
+                    <div class="waiting-player-avatar" style="background-color: #666;">?</div>
+                    Waiting...
+                </div>
+                <div class="waiting-player" style="opacity: 0.3;">
+                    <div class="waiting-player-avatar" style="background-color: #666;">?</div>
+                    Waiting...
+                </div>
+                <div class="waiting-player" style="opacity: 0.3;">
+                    <div class="waiting-player-avatar" style="background-color: #666;">?</div>
+                    Waiting...
+                </div>
+            `;
+            
+            // Show the stretching room
+            document.getElementById('stretchingRoom').classList.add('active');
+        }
+
+        function closeStretchingRoom() {
+            document.getElementById('stretchingRoom').classList.remove('active');
+            showMessage('Left stretching room', 'error');
         }
 
         async function showModeInfo(gameMode) {
@@ -799,7 +1217,11 @@
         }
 
         // Load sessions on page load
-        window.addEventListener('DOMContentLoaded', loadActiveSessions);
+        window.addEventListener('DOMContentLoaded', () => {
+            loadUserProfile(); // Load Firebase user profile
+            loadActiveSessions();
+            connectLobby(); // Connect to WebSocket for real-time updates
+        });
         
         setInterval(() => {
             // Could update player count, session list, etc.

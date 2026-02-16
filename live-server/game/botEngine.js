@@ -7,13 +7,73 @@
 const { v4: uuidv4 } = require('uuid');
 const LIMITS = require('../config/limits');
 
-// Bot names pool
-const BOT_NAMES = [
-  'BotAlpha', 'BotBeta', 'BotGamma', 'BotDelta', 'BotEpsilon',
-  'BotZeta', 'BotEta', 'BotTheta', 'BotIota', 'BotKappa',
-  'Crusher', 'Powerhouse', 'Ironman', 'Titan', 'Phoenix',
-  'Nexus', 'Cyborg', 'Sentinel', 'Specter', 'Vortex',
+// Realistic human names pool
+const FIRST_NAMES = [
+  'Alex', 'Jordan', 'Casey', 'Riley', 'Morgan', 'Taylor', 'Sam', 'Chris', 
+  'Jamie', 'Dakota', 'Drew', 'Blake', 'Kai', 'Avery', 'Cameron', 'Quinn',
+  'Max', 'River', 'Sage', 'Phoenix', 'Rowan', 'Jules', 'Skylar', 'Devon',
+  'Hunter', 'Logan', 'Mason', 'Parker', 'Reed', 'Rory', 'Spencer', 'Tanner',
+  'Zion', 'Ari', 'Ash', 'Bay', 'Charlie', 'Eden', 'Finn', 'Gray',
+  'Jade', 'Justice', 'Lane', 'Marley', 'Nova', 'Oakley', 'Payton', 'Reese'
 ];
+
+const LAST_NAMES = [
+  'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis',
+  'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Wilson', 'Anderson', 'Thomas', 'Taylor',
+  'Moore', 'Jackson', 'Martin', 'Lee', 'Thompson', 'White', 'Harris', 'Clark',
+  'Lewis', 'Robinson', 'Walker', 'Young', 'Hall', 'Allen', 'King', 'Wright',
+  'Scott', 'Green', 'Baker', 'Adams', 'Nelson', 'Carter', 'Mitchell', 'Roberts',
+  'Turner', 'Phillips', 'Campbell', 'Parker', 'Evans', 'Edwards', 'Collins', 'Stewart'
+];
+
+const AVATAR_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F',
+  '#BB8FCE', '#85C1E2', '#F8B739', '#52B788', '#E63946', '#457B9D',
+  '#FF8FAB', '#06FFA5', '#FFB627', '#A8DADC', '#E76F51', '#2A9D8F'
+];
+
+// Track used names to ensure uniqueness
+const usedNames = new Set();
+
+/**
+ * Generate a unique random name
+ */
+function generateUniqueName() {
+  let attempts = 0;
+  let name;
+  
+  do {
+    const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+    const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+    name = `${firstName}_${lastName}${Math.floor(Math.random() * 99)}`;
+    attempts++;
+    
+    // Fallback after too many attempts
+    if (attempts > 50) {
+      name = `${firstName}_${lastName}${Date.now() % 1000}`;
+      break;
+    }
+  } while (usedNames.has(name));
+  
+  usedNames.add(name);
+  return name;
+}
+
+/**
+ * Generate avatar data for bot
+ */
+function generateAvatar(name) {
+  const initials = name.substring(0, 2).toUpperCase();
+  const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+  
+  return {
+    type: 'initials',
+    initials,
+    backgroundColor: color,
+    // Could also use avatar API URLs:
+    // avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`
+  };
+}
 
 /**
  * Create a bot player
@@ -24,9 +84,13 @@ function createBotPlayer(index = 0) {
   const eliminationEngine = require('./eliminationEngine');
   const antiCheatEngine = require('./antiCheat');
 
+  const name = generateUniqueName();
+  const avatar = generateAvatar(name);
+
   return {
     id: `bot_${uuidv4().substring(0, 8)}`,
-    name: BOT_NAMES[index % BOT_NAMES.length],
+    name,
+    avatar,
     isBot: true,
     socket: null, // Bots don't have sockets
     repState: repEngine.createPlayerRepState(),

@@ -59,7 +59,44 @@ async function verifyToken(idToken) {
   }
 }
 
+/**
+ * Get user profile from Firestore
+ * Returns { uid, username, avatar, stats } or null
+ */
+async function getUserProfile(uid) {
+  if (!firebaseInitialized) {
+    initializeFirebase();
+  }
+
+  try {
+    const db = admin.firestore();
+    const userDoc = await db.collection('users').doc(uid).get();
+    
+    if (!userDoc.exists) {
+      return null;
+    }
+    
+    const data = userDoc.data();
+    
+    return {
+      uid,
+      username: data.username || data.displayName || 'Anonymous',
+      avatar: data.photoURL || data.avatar || null,
+      stats: {
+        totalReps: data.totalReps || 0,
+        totalScore: data.totalScore || 0,
+        wins: data.wins || 0,
+        raffleTickets: data.raffleTickets || 0,
+      },
+    };
+  } catch (error) {
+    console.error('Failed to fetch user profile:', error.message);
+    return null;
+  }
+}
+
 module.exports = {
   verifyToken,
   initializeFirebase,
+  getUserProfile,
 };

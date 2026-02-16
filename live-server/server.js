@@ -9,12 +9,16 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const { verifyToken } = require('./auth/verifyFirebase');
+const axios = require('axios');
+const { verifyToken, getUserProfile } = require('./auth/verifyFirebase');
 const socketHandler = require('./sockets/socketHandler');
 const sessionManager = require('./game/sessionManager');
 const gameModes = require('./config/gameModes');
 const LIMITS = require('./config/limits');
 const exerciseReferences = require('./config/exerciseReferences');
+
+// Discord Bot configuration
+const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 'http://localhost:5000';
 
 // Initialize Express app
 const app = express();
@@ -28,7 +32,6 @@ const wss = new WebSocket.Server({
 });
 
 const PORT = process.env.PORT || 8080;
-const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 'http://localhost:5000';
 
 // ============= MIDDLEWARE =============
 
@@ -117,6 +120,38 @@ app.get('/game-modes/:modeId', (req, res) => {
     cardDeckEnabled: fullMode.cardDeckEnabled,
     leaderboardType: fullMode.leaderboardType,
   });
+});
+
+// ============= USER PROFILE ENDPOINTS =============
+
+/**
+ * Get user profile (requires Firebase auth token)
+ */
+app.get('/profile', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const idToken = authHeader.substring(7);
+    const user = await verifyToken(idToken);
+    
+    if (!user || !user.uid) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const profile = await getUserProfile(user.uid);
+    
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    res.json(profile);
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
 });
 
 // ============= EXERCISE REFERENCE ENDPOINTS =============
@@ -217,7 +252,7 @@ app.post('/exercises/:exerciseName/score-form', express.json(), (req, res) => {
 /**
  * Create new session
  */
-app.post('/sessions', express.json(), (req, res) => {
+app.post('/sessions', express.json(), async (req, res) => {
   try {
     const { gameMode = 'standard', exerciseName } = req.body;
 
@@ -238,11 +273,38 @@ app.post('/sessions', express.json(), (req, res) => {
       ...modeConfig,
     });
 
+    // Create Discord voice channel
+    let discordInfo = null;
+    try {
+      const vcResponse = await axios.post(`${DISCORD_BOT_URL}/create-vc`, {
+        sessionId: session.id,
+      }, { timeout: 5000 });
+      discordInfo = vcResponse.data;
+      session.discordVC = discordInfo; // Store VC info in session
+      console.log(`✅ Created Discord VC for session ${session.id}: ${discordInfo.inviteLink}`);
+    } catch (error) {
+      console.warn(`⚠️ Discord VC creation failed for session ${session.id}:`, error.message);
+      // Continue without Discord VC
+    }
+
+    // Broadcast session creation to all lobby WebSocket clients
+    broadcastToLobby({
+      type: 'session_created',
+      session: {
+        id: session.id,
+        gameMode: session.gameMode,
+        status: session.status,
+        playerCount: 0,
+        discordLink: discordInfo?.inviteLink || null,
+      },
+    });
+
     res.json({
       sessionId: session.id,
       status: session.status,
       gameMode: session.gameMode,
       modeInfo: gameModes.getModeInfo(gameMode),
+      discordVC: discordInfo,
     });
   } catch (error) {
     console.error('Error creating session:', error);
@@ -309,10 +371,45 @@ app.post('/sessions/:sessionId/advance-turn', express.json(), (req, res) => {
 
 // ============= WEBSOCKET HANDLERS =============
 
+// Store lobby connections
+const lobbyConnections = new Set();
+
 wss.on('connection', async (socket, req) => {
   console.log('🔗 New WebSocket connection');
+  
+  // Check if this is a lobby connection (no auth required)
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  if (url.searchParams.get('type') === 'lobby') {
+    console.log('📺 Lobby viewer connected');
+    socket.isLobby = true;
+    lobbyConnections.add(socket);
+    
+    // Send current sessions
+    const sessions = sessionManager.getActiveSessions();
+    socket.send(JSON.stringify({
+      type: 'sessions_list',
+      sessions: sessions.map(s => ({
+        id: s.id,
+        gameMode: s.gameMode,
+        status: s.status,
+        playerCount: Object.keys(s.players || {}).length,
+        discordLink: s.discordVC?.inviteLink || null,
+      })),
+    }));
+    
+    socket.on('close', () => {
+      lobbyConnections.delete(socket);
+      console.log('📺 Lobby viewer disconnected');
+    });
+    
+    socket.on('error', () => {
+      lobbyConnections.delete(socket);
+    });
+    
+    return;
+  }
 
-  // Extract authorization header
+  // Extract authorization header for game connections
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log('❌ No auth header, closing connection');
@@ -335,6 +432,16 @@ wss.on('connection', async (socket, req) => {
   // Attach handlers
   socketHandler.attachSocketHandlers(socket, user.uid);
 });
+
+// Function to broadcast to all lobby viewers
+function broadcastToLobby(message) {
+  const payload = JSON.stringify(message);
+  lobbyConnections.forEach(socket => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(payload);
+    }
+  });
+}
 
 // ============= HEARTBEAT =============
 
