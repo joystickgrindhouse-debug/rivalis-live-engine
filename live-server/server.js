@@ -38,6 +38,29 @@ app.use(express.json());
 const path = require('path');
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Root API overview
+app.get('/', (req, res) => {
+  const modes = Object.values(gameModes.GAME_MODES).map(m => ({ id: m.id, name: m.name, icon: m.icon }));
+  const exercises = exerciseReferences.getAvailableExercises();
+  
+  res.json({
+    name: 'Rivalis Live Engine',
+    version: '1.0.0',
+    status: 'online',
+    gameModesCount: modes.length,
+    gameModes: modes,
+    exercisesCount: exercises.length,
+    exercises: exercises,
+    endpoints: {
+      health: '/health',
+      gameModes: '/game-modes',
+      exercises: '/exercises',
+      lobby: '/lobby-preview.html',
+      results: '/results.html',
+    },
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   const stats = {
