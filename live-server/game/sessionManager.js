@@ -47,12 +47,6 @@ function createSession(sessionInitData = {}) {
   return session;
 }
 
-  sessions.set(sessionId, session);
-  
-  console.log(`✅ Session created: ${sessionId}`);
-  return session;
-}
-
 /**
  * Get session by ID
  */
