@@ -830,6 +830,183 @@ app.post('/delete-vc', async (req, res) => {
 });
 
 /**
+ * Announce winner and grant stacking temporary role (up to 7x)
+ * POST /announce-winner
+ * Body: { sessionId, winnerDiscordId, winnerName, winnerScore, exerciseName, totalReps, guildId? }
+ */
+app.post('/announce-winner', async (req, res) => {
+  try {
+    const {
+      sessionId,
+      winnerDiscordId,
+      winnerName,
+      winnerScore,
+      exerciseName,
+      totalReps,
+      guildId,
+    } = req.body || {};
+
+    const targetGuildId = guildId || process.env.DISCORD_GUILD_ID;
+    if (!targetGuildId) return res.status(400).json({ error: 'Missing guild ID' });
+
+    const guild = await client.guilds.fetch(targetGuildId).catch(() => null);
+    if (!guild) return res.status(404).json({ error: 'Guild not found' });
+
+    const winnerLabel = winnerName || 'Winner';
+    const scoreLabel = Number.isFinite(Number(winnerScore)) ? Number(winnerScore) : 0;
+    const repsLabel = Number.isFinite(Number(totalReps)) ? Number(totalReps) : 0;
+    const exerciseLabel = exerciseName || 'workout';
+
+    // ============= STACKING ROLE SYSTEM (up to 7x) =============
+    let roleGrant = { granted: false };
+    
+    if (winnerDiscordId) {
+      const member = await guild.members.fetch(winnerDiscordId).catch(() => null);
+      
+      if (member) {
+        // Get current role count from Firebase
+        const roleCountRef = db.collection('users').doc(winnerDiscordId).collection('stats').doc('roleStack');
+        const roleCountDoc = await roleCountRef.get();
+        let currentStack = roleCountDoc.exists ? (roleCountDoc.data().stackCount || 0) : 0;
+
+        // Cap at 7 stacks
+        if (currentStack < 7) {
+          currentStack += 1;
+
+          // Remove old role if exists
+          const oldRoleName = currentStack > 1 ? `${WINNER_ROLE_NAME} x${currentStack - 1}` : null;
+          if (oldRoleName) {
+            const oldRole = guild.roles.cache.find(r => r.name === oldRoleName);
+            if (oldRole && member.roles.cache.has(oldRole.id)) {
+              await member.roles.remove(oldRole, 'Upgrading to higher stack').catch(() => {});
+            }
+          }
+
+          // Create or find new role
+          const newRoleName = currentStack === 1 ? WINNER_ROLE_NAME : `${WINNER_ROLE_NAME} x${currentStack}`;
+          let newRole = guild.roles.cache.find(r => r.name === newRoleName);
+          
+          if (!newRole) {
+            // Color gets more intense with each stack
+            const colors = ['#FFD700', '#FFA500', '#FF6347', '#FF0000', '#8B0000', '#4B0000', '#2B0000'];
+            newRole = await guild.roles.create({
+              name: newRoleName,
+              color: colors[currentStack - 1] || '#FFD700',
+              reason: `Rivalis Live stacking winner role x${currentStack}`,
+            });
+          }
+
+          // Assign new role
+          await member.roles.add(newRole.id, `Won Rivalis session ${sessionId} - Stack: ${currentStack}`);
+
+          // Get duration from env (default 60 minutes)
+          const durationMinutes = Number(process.env.DISCORD_PREMIUM_ROLE_DURATION_MINUTES || 60);
+
+          // Update Firebase with new stack count and timestamp
+          await roleCountRef.set({
+            stackCount: currentStack,
+            roleName: newRoleName,
+            roleId: newRole.id,
+            lastWinAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + durationMinutes * 60 * 1000).toISOString(),
+            sessionId,
+          }, { merge: true });
+
+          // Schedule role removal
+          setTimeout(async () => {
+            try {
+              const freshMember = await guild.members.fetch(winnerDiscordId).catch(() => null);
+              if (freshMember?.roles?.cache?.has(newRole.id)) {
+                await freshMember.roles.remove(newRole.id, 'Temporary stacking role expired');
+                
+                // Reset stack count in Firebase
+                await roleCountRef.set({
+                  stackCount: 0,
+                  lastExpiredAt: new Date().toISOString(),
+                }, { merge: true });
+                
+                console.log(`⏰ Removed stacking role from ${member.user.username} after ${durationMinutes} minutes`);
+              }
+            } catch (err) {
+              console.error('Failed to remove temporary stacking role:', err.message);
+            }
+          }, Math.max(1, durationMinutes) * 60 * 1000);
+
+          roleGrant = {
+            granted: true,
+            roleId: newRole.id,
+            roleName: newRoleName,
+            stackCount: currentStack,
+            durationMinutes,
+          };
+
+          console.log(`✅ Granted stacking role ${newRoleName} to ${member.user.username}`);
+        } else {
+          roleGrant = {
+            granted: false,
+            reason: 'Maximum stack of 7 reached',
+            stackCount: currentStack,
+          };
+        }
+      }
+    }
+
+    // ============= ANNOUNCE TO DISCORD CHANNEL =============
+    const channelId = process.env.DISCORD_WINNER_CHANNEL_ID;
+    let announcement = { sent: false };
+
+    if (channelId) {
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (channel && channel.isTextBased()) {
+        const embed = new EmbedBuilder()
+          .setColor(roleGrant.granted ? '#FFD700' : '#00FF00')
+          .setTitle('🏆 Rivalis Live Winner!')
+          .setDescription(`**${winnerLabel}** crushed the competition!`)
+          .addFields(
+            { name: '💪 Exercise', value: exerciseLabel, inline: true },
+            { name: '📊 Total Reps', value: String(repsLabel), inline: true },
+            { name: '🎯 Final Score', value: String(scoreLabel), inline: true },
+            { name: '🎮 Session ID', value: sessionId || 'N/A', inline: false }
+          )
+          .setTimestamp()
+          .setFooter({ text: 'Rivalis Live' });
+
+        if (roleGrant.granted) {
+          const stackEmoji = ['', '⭐', '⭐⭐', '⭐⭐⭐', '⭐⭐⭐⭐', '⭐⭐⭐⭐⭐', '⭐⭐⭐⭐⭐⭐', '⭐⭐⭐⭐⭐⭐⭐'];
+          embed.addFields({
+            name: '👑 Role Awarded',
+            value: `**${roleGrant.roleName}** ${stackEmoji[roleGrant.stackCount] || ''}\n🕐 Duration: ${roleGrant.durationMinutes} minutes`,
+            inline: false,
+          });
+        } else if (roleGrant.reason) {
+          embed.addFields({
+            name: '🔥 Max Streak!',
+            value: `${winnerLabel} has reached the maximum role stack of 7! 🎉`,
+            inline: false,
+          });
+        }
+
+        await channel.send({ embeds: [embed] });
+        announcement = { sent: true, channelId };
+        console.log(`📢 Winner announcement sent to channel ${channelId}`);
+      }
+    }
+
+    return res.json({
+      success: true,
+      sessionId,
+      winnerName: winnerLabel,
+      winnerScore: scoreLabel,
+      roleGrant,
+      announcement,
+    });
+  } catch (error) {
+    console.error('announce-winner failed:', error.message);
+    return res.status(500).json({ error: 'Failed to announce winner', message: error.message });
+  }
+});
+
+/**
  * Get active channels
  * GET /channels
  */
@@ -921,10 +1098,7 @@ async function start() {
     // Connect Discord bot
     await client.login(DISCORD_TOKEN);
 
-    // Wait for bot to be ready
-    await client.on('ready', () => {});
-
-    // Start HTTP server
+    // Start HTTP server (ready event fires separately)
     httpServer.listen(BOT_PORT, () => {
       console.log(`🌐 HTTP server listening on port ${BOT_PORT}\n`);
     });
