@@ -49,11 +49,13 @@ function sendSessionEndedToHub(sessionData, finalLeaderboard, winner) {
   if (!process.env.HUB_API_URL) return;
 
   const payload = {
-    sessionId: sessionData.sessionId,
+    sessionId: sessionData.id,
     winner,
     finalLeaderboard,
     endedAt: Date.now(),
-    duration: Date.now() - sessionData.createdAt,
+    sessionDurationMs: Date.now() - sessionData.createdAt,
+    exerciseName: sessionData.exerciseName,
+    gameMode: sessionData.gameMode || 'standard',
   };
 
   postToHub('/api/live-engine/sessions/ended', payload)

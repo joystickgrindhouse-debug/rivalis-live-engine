@@ -8,6 +8,12 @@ yarn.lock
 .env.local
 .env.*.local
 
+# Secrets
+API_SECRET.txt
+FIREBASE_CREDENTIALS.json
+**/FIREBASE_CREDENTIALS.json
+**/.env
+
 # Logs
 logs/
 *.log

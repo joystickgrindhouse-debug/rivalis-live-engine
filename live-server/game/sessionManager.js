@@ -19,7 +19,7 @@ const sessions = new Map();
 /**
  * Create a new game session
  */
-function createSession(sessionInitData) {
+function createSession(sessionInitData = {}) {
   const sessionId = uuidv4();
   
   const session = {
@@ -30,9 +30,22 @@ function createSession(sessionInitData) {
     playerOrder: [],
     turnState: null,
     discordVCId: null,
+    // Game mode configuration
+    gameMode: sessionInitData.gameMode || 'standard',
+    exerciseName: sessionInitData.exerciseName || null,
+    turnTimeMs: sessionInitData.turnTimeMs || LIMITS.TURN_TIME_MS,
+    eliminationThreshold: sessionInitData.eliminationThreshold || LIMITS.ELIMINATION_FAIL_THRESHOLD,
+    cardDeckEnabled: sessionInitData.cardDeckEnabled !== false,
+    leaderboardType: sessionInitData.leaderboardType || 'score',
     // Cleanup function
     _cleanup: () => cleanupSession(sessionId),
   };
+
+  sessions.set(sessionId, session);
+  
+  console.log(`✅ Session created: ${sessionId} (mode: ${session.gameMode})`);
+  return session;
+}
 
   sessions.set(sessionId, session);
   

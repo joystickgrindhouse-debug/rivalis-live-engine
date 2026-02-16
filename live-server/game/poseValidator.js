@@ -4,6 +4,7 @@
  */
 
 const exercisesConfig = require('../config/exercises');
+const exerciseReferences = require('../config/exerciseReferences');
 
 /**
  * Validate a single rep against exercise reference data
@@ -46,8 +47,21 @@ function validateRepForm(repData, exerciseName) {
     };
   }
 
-  // Calculate form score (how well does this match reference frames?)
-  const formScore = calculateFormScore(angles, distances, referenceFrames);
+  // Try to get form score using master reference frames
+  let formScore = 0;
+  const masterReference = exerciseReferences.getReference(exerciseName);
+  
+  if (masterReference && repData.frames && repData.frames.length > 0) {
+    // Use master reference for enhanced form scoring
+    formScore = scoreLiveFormAgainstReference(
+      exerciseName, 
+      repData, 
+      masterReference
+    );
+  } else {
+    // Fallback to original calculation
+    formScore = calculateFormScore(angles, distances, referenceFrames);
+  }
 
   // Calculate depth (range of motion)
   const depth = calculateDepth(angles, referenceFrames);
@@ -81,6 +95,48 @@ function validateRepForm(repData, exerciseName) {
     isValid,
     reason,
   };
+}
+
+/**
+ * Score live form against master reference frames
+ * Returns score 0-1 (normalized from 0-100)
+ */
+function scoreLiveFormAgainstReference(exerciseName, repData, masterReference) {
+  try {
+    if (!repData.frames || repData.frames.length === 0) {
+      return 0;
+    }
+
+    // Average score across all frames in the rep
+    let totalScore = 0;
+    let frameCount = 0;
+
+    for (const liveFrame of repData.frames) {
+      // Find closest reference frame by time
+      const timeSeconds = liveFrame.t || 0;
+      const referenceFrame = exerciseReferences.getReferenceFrameAtTime(
+        exerciseName,
+        timeSeconds
+      );
+
+      if (referenceFrame) {
+        const score = exerciseReferences.scoreFormAccuracy(
+          exerciseName,
+          liveFrame,
+          referenceFrame
+        );
+        totalScore += score;
+        frameCount++;
+      }
+    }
+
+    // Return normalized score (0-1)
+    if (frameCount === 0) return 0;
+    return (totalScore / frameCount) / 100; // Normalize from 0-100 to 0-1
+  } catch (error) {
+    console.error('[PoseValidator] Error scoring against reference:', error.message);
+    return 0;
+  }
 }
 
 /**

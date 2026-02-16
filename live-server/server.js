@@ -12,7 +12,9 @@ const WebSocket = require('ws');
 const { verifyToken } = require('./auth/verifyFirebase');
 const socketHandler = require('./sockets/socketHandler');
 const sessionManager = require('./game/sessionManager');
+const gameModes = require('./config/gameModes');
 const LIMITS = require('./config/limits');
+const exerciseReferences = require('./config/exerciseReferences');
 
 // Initialize Express app
 const app = express();
@@ -32,6 +34,10 @@ const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 'http://localhost:5000';
 
 app.use(express.json());
 
+// Serve static files from public directory
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   const stats = {
@@ -44,6 +50,145 @@ app.get('/health', (req, res) => {
   res.json(stats);
 });
 
+// Results page for end-of-match social images
+app.get('/results', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'results.html'));
+});
+
+/**
+ * Get available game modes
+ */
+app.get('/game-modes', (req, res) => {
+  const modes = Object.values(gameModes.GAME_MODES).map(mode => ({
+    id: mode.id,
+    name: mode.name,
+    description: mode.description,
+    minPlayers: mode.minPlayers,
+    maxPlayers: mode.maxPlayers,
+    cardDeckEnabled: mode.cardDeckEnabled,
+  }));
+  
+  res.json({
+    modes,
+    total: modes.length,
+  });
+});
+
+/**
+ * Get specific game mode details
+ */
+app.get('/game-modes/:modeId', (req, res) => {
+  const modeInfo = gameModes.getModeInfo(req.params.modeId);
+  
+  if (!modeInfo) {
+    return res.status(404).json({ error: 'Game mode not found' });
+  }
+  
+  const fullMode = gameModes.getModeByIdOrName(req.params.modeId);
+  
+  res.json({
+    ...modeInfo,
+    turnTimeMs: fullMode.turnTimeMs,
+    eliminationThreshold: fullMode.eliminationThreshold,
+    allowSpectators: fullMode.allowSpectators,
+    cardDeckEnabled: fullMode.cardDeckEnabled,
+    leaderboardType: fullMode.leaderboardType,
+  });
+});
+
+// ============= EXERCISE REFERENCE ENDPOINTS =============
+
+/**
+ * Get all available exercises
+ */
+app.get('/exercises', (req, res) => {
+  const exercises = exerciseReferences.getAvailableExercises();
+  const detailed = exercises.map(name => exerciseReferences.getExerciseSummary(name));
+  
+  res.json({
+    exercises: detailed,
+    total: exercises.length,
+  });
+});
+
+/**
+ * Get reference data for a specific exercise
+ */
+app.get('/exercises/:exerciseName', (req, res) => {
+  const reference = exerciseReferences.getReference(req.params.exerciseName);
+  
+  if (!reference) {
+    const available = exerciseReferences.getAvailableExercises();
+    return res.status(404).json({ 
+      error: `Exercise not found: ${req.params.exerciseName}`,
+      availableExercises: available,
+    });
+  }
+  
+  // Return summary + metadata, not full frame data to save bandwidth
+  res.json({
+    ...exerciseReferences.getExerciseSummary(req.params.exerciseName),
+    frameCount: reference.frames.length,
+    landmarks: exerciseReferences.getKeyLandmarks(req.params.exerciseName),
+  });
+});
+
+/**
+ * Get full reference frames for an exercise (for client-side validation)
+ */
+app.get('/exercises/:exerciseName/frames', (req, res) => {
+  const frames = exerciseReferences.getFrames(req.params.exerciseName);
+  
+  if (frames.length === 0) {
+    return res.status(404).json({ error: 'Exercise frames not found' });
+  }
+  
+  res.json({
+    exercise: req.params.exerciseName,
+    frames: frames,
+    frameCount: frames.length,
+  });
+});
+
+/**
+ * Score form accuracy against reference
+ * Client sends live pose data, server compares against reference
+ */
+app.post('/exercises/:exerciseName/score-form', express.json(), (req, res) => {
+  try {
+    const { exerciseName } = req.params;
+    const { liveFrame, referenceTimeSeconds } = req.body;
+
+    if (!liveFrame) {
+      return res.status(400).json({ error: 'Missing liveFrame data' });
+    }
+
+    const referenceFrame = exerciseReferences.getReferenceFrameAtTime(
+      exerciseName, 
+      referenceTimeSeconds || 0
+    );
+
+    if (!referenceFrame) {
+      return res.status(404).json({ error: 'Exercise reference not found' });
+    }
+
+    const formScore = exerciseReferences.scoreFormAccuracy(
+      exerciseName,
+      liveFrame,
+      referenceFrame
+    );
+
+    res.json({
+      formScore,
+      exercise: exerciseName,
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error('[ExerciseScore] Error:', error.message);
+    res.status(500).json({ error: 'Failed to score form', message: error.message });
+  }
+});
+
 // ============= SESSION ENDPOINTS =============
 
 /**
@@ -51,10 +196,30 @@ app.get('/health', (req, res) => {
  */
 app.post('/sessions', express.json(), (req, res) => {
   try {
-    const session = sessionManager.createSession();
+    const { gameMode = 'standard', exerciseName } = req.body;
+
+    // Validate game mode exists
+    if (!gameModes.isValidMode(gameMode)) {
+      return res.status(400).json({ 
+        error: `Invalid game mode: ${gameMode}`,
+        availableModes: Object.values(gameModes.GAME_MODES).map(m => m.id),
+      });
+    }
+
+    // Get mode config and apply defaults
+    const modeConfig = gameModes.getDefaultSettings(gameMode);
+    
+    const session = sessionManager.createSession({ 
+      gameMode, 
+      exerciseName,
+      ...modeConfig,
+    });
+
     res.json({
       sessionId: session.id,
       status: session.status,
+      gameMode: session.gameMode,
+      modeInfo: gameModes.getModeInfo(gameMode),
     });
   } catch (error) {
     console.error('Error creating session:', error);

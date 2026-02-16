@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Match Results - Rivalis</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .results-container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .image-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .results-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      animation: fadeIn 0.6s ease-in;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+
+    .results-image:hover {
+      transform: scale(1.02);
+    }
+
+    .social-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+      padding: 40px 20px 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      animation: slideUp 0.6s ease 1.2s both;
+    }
+
+    .share-prompt {
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    .ticket-bonus {
+      color: #FFD700;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .social-buttons {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .social-btn {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      font-weight: bold;
+      color: white;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+
+    .social-btn:hover {
+      transform: scale(1.15);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    }
+
+    .social-btn.facebook {
+      background: #1877F2;
+    }
+
+    .social-btn.twitter {
+      background: #1DA1F2;
+    }
+
+    .social-btn.whatsapp {
+      background: #25D366;
+    }
+
+    .social-btn.skip {
+      background: #666;
+      font-size: 14px;
+      width: auto;
+      padding: 0 20px;
+    }
+
+    .confirmation {
+      background: rgba(255, 215, 0, 0.2);
+      border: 2px solid #FFD700;
+      color: #FFD700;
+      padding: 15px 25px;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: bold;
+      animation: pulse 0.5s ease;
+    }
+
+    .loading {
+      color: #fff;
+      font-size: 18px;
+      text-align: center;
+    }
+
+    .error {
+      background: #8B0000;
+      color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      max-width: 500px;
+    }
+
+    .redirect-prompt {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+      animation: fadeInUp 0.8s ease 2s both;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .share-prompt {
+        font-size: 14px;
+      }
+
+      .ticket-bonus {
+        font-size: 12px;
+      }
+
+      .social-btn {
+        width: 45px;
+        height: 45px;
+        font-size: 20px;
+      }
+
+      .redirect-prompt {
+        font-size: 11px;
+        bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="results-container" id="resultsContainer">
+    <div class="loading">Loading results...</div>
+  </div>
+
+  <script>
+    let sessionData = null;
+    let hasShared = false;
+    let shareTimeoutId = null;
+
+    /**
+     * Parse URL parameters
+     */
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        sessionId: params.get('sessionId'),
+        userId: params.get('userId'),
+        imageId: params.get('imageId'),
+        gameMode: params.get('gameMode') || 'standard',
+      };
+    }
+
+    /**
+     * Fetch session data and display results
+     */
+    async function loadResults() {
+      try {
+        const { sessionId } = getUrlParams();
+
+        if (!sessionId) {
+          throw new Error('No session ID provided');
+        }
+
+        // Fetch session archive to get the social image URL
+        const response = await fetch(`/api/session/${sessionId}`, {
+          method: 'GET',
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load session data');
+        }
+
+        sessionData = await response.json();
+        const imageUrl = sessionData.socialImage?.url;
+
+        if (!imageUrl) {
+          throw new Error('No image data found for this session');
+        }
+
+        // Display the image with share options
+        displayImage(imageUrl, sessionId);
+      } catch (error) {
+        console.error('Error loading results:', error);
+        displayError(error.message);
+      }
+    }
+
+    /**
+     * Display the results image with social share buttons
+     */
+    function displayImage(imageUrl, sessionId) {
+      const { userId, gameMode } = getUrlParams();
+      const container = document.getElementById('resultsContainer');
+      const gameModeLabel = gameMode.charAt(0).toUpperCase() + gameMode.slice(1).replace(/_/g, ' ');
+      
+      container.innerHTML = `
+        <div class="image-wrapper">
+          <img 
+            src="${imageUrl}" 
+            alt="Match Results" 
+            class="results-image" 
+            onclick="skipShare()"
+            onerror="displayError('Failed to load image')"
+          />
+          <div class="social-overlay">
+            <div class="share-prompt">Share your ${gameModeLabel} victory to earn bonus tickets!</div>
+            <div class="ticket-bonus">✨ +100 Raffle Tickets for Sharing ✨</div>
+            <div class="social-buttons">
+              <button class="social-btn facebook" onclick="shareToFacebook('${sessionId}', '${userId}')" title="Share on Facebook">f</button>
+              <button class="social-btn twitter" onclick="shareToTwitter('${sessionId}', '${userId}')" title="Share on Twitter">𝕏</button>
+              <button class="social-btn whatsapp" onclick="shareToWhatsApp('${sessionId}', '${userId}')" title="Share on WhatsApp">W</button>
+              <button class="social-btn skip" onclick="skipShare()">Skip</button>
+            </div>
+            <div class="redirect-prompt">Or click the image to continue</div>
+          </div>
+        </div>
+      `;
+
+      // Allow clicking image to skip share
+      const image = container.querySelector('.results-image');
+      if (image) {
+        image.addEventListener('click', skipShare);
+      }
+
+      // Auto-redirect after 15 seconds
+      shareTimeoutId = setTimeout(() => {
+        if (!hasShared) {
+          redirectToHub(sessionId);
+        }
+      }, 15000);
+    }
+
+    /**
+     * Share to Facebook
+     */
+    function shareToFacebook(sessionId, userId) {
+      const text = 'Just crushed it on Rivalis! 🔥 Check out my match results!';
+      const url = `https://www.facebook.com/sharer/sharer.php?u=${window.location.origin}/results?sessionId=${sessionId}`;
+      window.open(url, 'facebook-share', 'width=600,height=400');
+      recordShare(sessionId, userId);
+    }
+
+    /**
+     * Share to Twitter
+     */
+    function shareToTwitter(sessionId, userId) {
+      const text = 'Just crushed it on Rivalis! 🔥 Check out my match results! %23fitness %23gaming';
+      const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${window.location.origin}/results?sessionId=${sessionId}`;
+      window.open(url, 'twitter-share', 'width=600,height=400');
+      recordShare(sessionId, userId);
+    }
+
+    /**
+     * Share to WhatsApp
+     */
+    function shareToWhatsApp(sessionId, userId) {
+      const text = 'Just crushed it on Rivalis! 🔥 Check out my match results! ' + window.location.origin + '/results?sessionId=' + sessionId;
+      const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+      window.open(url, 'whatsapp-share', 'width=600,height=400');
+      recordShare(sessionId, userId);
+    }
+
+    /**
+     * Record share and award bonus tickets
+     */
+    async function recordShare(sessionId, userId) {
+      if (hasShared) return; // Prevent double-sharing
+
+      hasShared = true;
+      clearTimeout(shareTimeoutId);
+
+      try {
+        const response = await fetch('/api/live-engine/share-bonus', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionId}`, // Using sessionId as temporary verification
+          },
+          body: JSON.stringify({
+            sessionId,
+            userId,
+            bonusTickets: 100,
+            timestamp: Date.now(),
+          }),
+        });
+
+        if (response.ok) {
+          showShareConfirmation();
+          setTimeout(() => redirectToHub(sessionId), 3000);
+        } else {
+          console.error('Failed to award bonus tickets');
+          setTimeout(() => redirectToHub(sessionId), 2000);
+        }
+      } catch (error) {
+        console.error('Error recording share:', error);
+        setTimeout(() => redirectToHub(sessionId), 2000);
+      }
+    }
+
+    /**
+     * Show confirmation message
+     */
+    function showShareConfirmation() {
+      const overlay = document.querySelector('.social-overlay');
+      if (overlay) {
+        overlay.innerHTML = `
+          <div class="confirmation">
+            ✅ +100 Bonus Tickets Awarded!<br>
+            <span style="font-size: 12px;">Redirecting to hub...</span>
+          </div>
+        `;
+      }
+    }
+
+    /**
+     * Skip sharing and redirect
+     */
+    function skipShare() {
+      const { sessionId } = getUrlParams();
+      clearTimeout(shareTimeoutId);
+      redirectToHub(sessionId);
+    }
+
+    /**
+     * Display error message
+     */
+    function displayError(message) {
+      const container = document.getElementById('resultsContainer');
+      container.innerHTML = `
+        <div class="error">
+          <p>Error loading results</p>
+          <p style="font-size: 12px; margin-top: 10px;">${message}</p>
+          <p style="font-size: 12px; margin-top: 15px;">Redirecting to hub...</p>
+        </div>
+      `;
+      setTimeout(() => redirectToHub(null), 3000);
+    }
+
+    /**
+     * Redirect back to hub
+     */
+    function redirectToHub(sessionId) {
+      const hubUrl = window.location.origin.includes('localhost')
+        ? 'http://localhost:3000'
+        : window.location.origin;
+
+      if (sessionId) {
+        window.location.href = `${hubUrl}?lastSession=${sessionId}`;
+      } else {
+        window.location.href = hubUrl;
+      }
+    }
+
+    // Load results on page load
+    window.addEventListener('load', loadResults);
+  </script>
+</body>
+</html>
+
