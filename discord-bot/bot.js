@@ -9,7 +9,6 @@ const { Client, GatewayIntentBits, ChannelType, EmbedBuilder } = require('discor
 const admin = require('firebase-admin');
 const express = require('express');
 const http = require('http');
-const sharp = require('sharp');
 
 // Initialize Express
 const app = express();
