@@ -26,9 +26,12 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
-// Initialize Discord Client
+// Initialize Discord Client (only non-privileged intents)
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [
+    GatewayIntentBits.Guilds,           // Access to guild/server info
+    GatewayIntentBits.GuildVoiceStates, // Manage voice channels
+  ],
   allowedMentions: { parse: [] },
   failIfNotExists: false,
 });
@@ -338,10 +341,29 @@ app.get('/share/history/:userId', async (req, res) => {
 
 // ============= DISCORD EVENTS =============
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`\n🎙️ ===== RIVALIS DISCORD BOT =====`);
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   console.log(`🏢 Guild ID: ${DISCORD_GUILD_ID}`);
+  
+  // Check permissions
+  try {
+    const guild = await client.guilds.fetch(DISCORD_GUILD_ID);
+    const botMember = await guild.members.fetch(client.user.id);
+    const hasManageRoles = botMember.permissions.has('ManageRoles');
+    const hasManageChannels = botMember.permissions.has('ManageChannels');
+    
+    console.log(`🔐 Permissions:`);
+    console.log(`   ${hasManageRoles ? '✅' : '❌'} Manage Roles ${!hasManageRoles ? '(REQUIRED for Champion roles!)' : ''}`);
+    console.log(`   ${hasManageChannels ? '✅' : '❌'} Manage Channels ${!hasManageChannels ? '(REQUIRED for voice channels!)' : ''}`);
+    
+    if (!hasManageRoles || !hasManageChannels) {
+      console.warn(`\n⚠️  MISSING PERMISSIONS! See discord-bot/ROLE_SETUP.md`);
+    }
+  } catch (err) {
+    console.warn('⚠️  Could not check permissions:', err.message);
+  }
+  
   console.log(`====================================\n`);
 
   client.user.setPresence({
@@ -748,13 +770,13 @@ app.post('/create-vc', async (req, res) => {
       return res.status(500).json({ error: 'Failed to create voice channel' });
     }
 
-    // Generate invite link
+    // Generate invite link (permanent membership, good for growing server)
     let invite;
     try {
       invite = await channel.createInvite({
-        maxAge: 3600, // 1 hour
-        maxUses: 100,
-        temporary: true,
+        maxAge: 86400, // 24 hours (long enough for session + discovery)
+        maxUses: 0, // Unlimited uses (helps grow server)
+        temporary: false, // Permanent membership (not just for this session)
         reason: `Rivalis Live session: ${sessionId}`,
       });
     } catch (error) {
@@ -857,96 +879,120 @@ app.post('/announce-winner', async (req, res) => {
     const repsLabel = Number.isFinite(Number(totalReps)) ? Number(totalReps) : 0;
     const exerciseLabel = exerciseName || 'workout';
 
-    // ============= STACKING ROLE SYSTEM (up to 7x) =============
+    // ============= MILESTONE ROLE SYSTEM (Permanent) =============
+    // 10 tiers based on lifetime wins - roles persist as long as user stays active
+    const MILESTONE_ROLES = [
+      { wins: 1, name: '🟥 Spark', color: '#FF0000', emoji: '🟥' },
+      { wins: 3, name: '🩸 Rival', color: '#DC143C', emoji: '🩸' },
+      { wins: 5, name: '🔥 Burner', color: '#FF4500', emoji: '🔥' },
+      { wins: 8, name: '⚡ Enforcer', color: '#FFD700', emoji: '⚡' },
+      { wins: 12, name: '🥊 Breaker', color: '#FF8C00', emoji: '🥊' },
+      { wins: 18, name: '🧨 Dominator', color: '#FF6347', emoji: '🧨' },
+      { wins: 25, name: '🏆 Elite', color: '#DAA520', emoji: '🏆' },
+      { wins: 35, name: '👑 Champion', color: '#FFD700', emoji: '👑' },
+      { wins: 50, name: '🩶 Apex', color: '#C0C0C0', emoji: '🩶' },
+      { wins: 75, name: '💀 Ascended', color: '#8B0000', emoji: '💀' },
+    ];
+
     let roleGrant = { granted: false };
     
     if (winnerDiscordId) {
-      const member = await guild.members.fetch(winnerDiscordId).catch(() => null);
-      
-      if (member) {
-        // Get current role count from Firebase
-        const roleCountRef = db.collection('users').doc(winnerDiscordId).collection('stats').doc('roleStack');
-        const roleCountDoc = await roleCountRef.get();
-        let currentStack = roleCountDoc.exists ? (roleCountDoc.data().stackCount || 0) : 0;
+      try {
+        const member = await guild.members.fetch(winnerDiscordId).catch(() => null);
+        
+        if (member) {
+          // Get total lifetime wins from Firebase
+          const userStatsRef = db.collection('users').doc(winnerDiscordId).collection('stats').doc('lifetime');
+          const userStatsDoc = await userStatsRef.get();
+          const currentWins = userStatsDoc.exists ? (userStatsDoc.data().totalWins || 0) : 0;
+          const newTotalWins = currentWins + 1;
 
-        // Cap at 7 stacks
-        if (currentStack < 7) {
-          currentStack += 1;
-
-          // Remove old role if exists
-          const oldRoleName = currentStack > 1 ? `${WINNER_ROLE_NAME} x${currentStack - 1}` : null;
-          if (oldRoleName) {
-            const oldRole = guild.roles.cache.find(r => r.name === oldRoleName);
-            if (oldRole && member.roles.cache.has(oldRole.id)) {
-              await member.roles.remove(oldRole, 'Upgrading to higher stack').catch(() => {});
-            }
-          }
-
-          // Create or find new role
-          const newRoleName = currentStack === 1 ? WINNER_ROLE_NAME : `${WINNER_ROLE_NAME} x${currentStack}`;
-          let newRole = guild.roles.cache.find(r => r.name === newRoleName);
-          
-          if (!newRole) {
-            // Color gets more intense with each stack
-            const colors = ['#FFD700', '#FFA500', '#FF6347', '#FF0000', '#8B0000', '#4B0000', '#2B0000'];
-            newRole = await guild.roles.create({
-              name: newRoleName,
-              color: colors[currentStack - 1] || '#FFD700',
-              reason: `Rivalis Live stacking winner role x${currentStack}`,
-            });
-          }
-
-          // Assign new role
-          await member.roles.add(newRole.id, `Won Rivalis session ${sessionId} - Stack: ${currentStack}`);
-
-          // Get duration from env (default 60 minutes)
-          const durationMinutes = Number(process.env.DISCORD_PREMIUM_ROLE_DURATION_MINUTES || 60);
-
-          // Update Firebase with new stack count and timestamp
-          await roleCountRef.set({
-            stackCount: currentStack,
-            roleName: newRoleName,
-            roleId: newRole.id,
+          // Update total wins in Firebase
+          await userStatsRef.set({
+            totalWins: newTotalWins,
             lastWinAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + durationMinutes * 60 * 1000).toISOString(),
-            sessionId,
+            lastSessionId: sessionId,
           }, { merge: true });
 
-          // Schedule role removal
-          setTimeout(async () => {
-            try {
-              const freshMember = await guild.members.fetch(winnerDiscordId).catch(() => null);
-              if (freshMember?.roles?.cache?.has(newRole.id)) {
-                await freshMember.roles.remove(newRole.id, 'Temporary stacking role expired');
-                
-                // Reset stack count in Firebase
-                await roleCountRef.set({
-                  stackCount: 0,
-                  lastExpiredAt: new Date().toISOString(),
-                }, { merge: true });
-                
-                console.log(`⏰ Removed stacking role from ${member.user.username} after ${durationMinutes} minutes`);
-              }
-            } catch (err) {
-              console.error('Failed to remove temporary stacking role:', err.message);
+          // Determine which milestone role they've earned
+          let earnedMilestone = null;
+          for (let i = MILESTONE_ROLES.length - 1; i >= 0; i--) {
+            if (newTotalWins >= MILESTONE_ROLES[i].wins) {
+              earnedMilestone = MILESTONE_ROLES[i];
+              break;
             }
-          }, Math.max(1, durationMinutes) * 60 * 1000);
+          }
 
-          roleGrant = {
-            granted: true,
-            roleId: newRole.id,
-            roleName: newRoleName,
-            stackCount: currentStack,
-            durationMinutes,
-          };
+          if (earnedMilestone) {
+            // Remove ALL old milestone roles
+            const allMilestoneNames = MILESTONE_ROLES.map(m => m.name);
+            for (const milestoneName of allMilestoneNames) {
+              const oldRole = guild.roles.cache.find(r => r.name === milestoneName);
+              if (oldRole && member.roles.cache.has(oldRole.id)) {
+                await member.roles.remove(oldRole, 'Upgrading to higher milestone').catch(() => {});
+              }
+            }
 
-          console.log(`✅ Granted stacking role ${newRoleName} to ${member.user.username}`);
+            // Create or find the earned milestone role
+            let milestoneRole = guild.roles.cache.find(r => r.name === earnedMilestone.name);
+            
+            if (!milestoneRole) {
+              milestoneRole = await guild.roles.create({
+                name: earnedMilestone.name,
+                color: earnedMilestone.color,
+                reason: `Rivalis milestone role: ${earnedMilestone.wins}+ wins`,
+              });
+            }
+
+            // Assign the milestone role
+            await member.roles.add(milestoneRole.id, `Earned ${earnedMilestone.name} - ${newTotalWins} total wins`);
+
+            // Update Firebase with current milestone
+            await userStatsRef.set({
+              currentMilestone: earnedMilestone.name,
+              currentMilestoneWins: earnedMilestone.wins,
+              roleId: milestoneRole.id,
+            }, { merge: true });
+
+            roleGrant = {
+              granted: true,
+              roleId: milestoneRole.id,
+              roleName: earnedMilestone.name,
+              totalWins: newTotalWins,
+              milestoneWins: earnedMilestone.wins,
+              isPermanent: true,
+            };
+
+            console.log(`✅ Granted milestone role ${earnedMilestone.name} to ${member.user.username} (${newTotalWins} total wins)`);
+          } else {
+            roleGrant = {
+              granted: false,
+              reason: 'No milestone reached yet',
+              totalWins: newTotalWins,
+            };
+            console.log(`📊 ${member.user.username} has ${newTotalWins} win(s), no milestone role yet`);
+          }
         } else {
           roleGrant = {
             granted: false,
-            reason: 'Maximum stack of 7 reached',
-            stackCount: currentStack,
+            reason: 'User not found in guild',
           };
+          console.warn(`⚠️ Could not fetch member ${winnerDiscordId}`);
+        }
+      } catch (roleError) {
+        const errorMsg = roleError.message || String(roleError);
+        roleGrant = {
+          granted: false,
+          error: errorMsg,
+        };
+        
+        // Provide helpful error messages
+        if (errorMsg.includes('Missing Permissions')) {
+          console.error(`❌ MISSING PERMISSIONS: Bot needs "Manage Roles" permission. See discord-bot/ROLE_SETUP.md`);
+        } else if (errorMsg.includes('Missing Access')) {
+          console.error(`❌ ROLE HIERARCHY ERROR: Bot's role must be ABOVE milestone roles. See discord-bot/ROLE_SETUP.md`);
+        } else {
+          console.error(`❌ Role assignment error:`, errorMsg);
         }
       }
     }

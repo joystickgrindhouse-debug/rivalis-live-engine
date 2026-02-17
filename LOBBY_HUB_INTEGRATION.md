@@ -1,4 +1,5 @@
-# 🎮 Lobby Hub Integration Guide
+cd /workspaces/rivalis-live-engine/discord-bot
+npm install# 🎮 Lobby Hub Integration Guide
 
 ## Overview
 The **Stretching Room** lobby is now 100% functional with:

@@ -33,7 +33,7 @@ Railway will:
 
 ```bash
 railway variables set HUB_API_URL=https://your-hub.vercel.app
-railway variables set HUB_API_SECRET=a7f3d8c9e2b1f4a6d8c7e9f2a3b5d7e8c9f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5
+railway variables set HUB_API_SECRET=your_hub_api_secret_here
 railway variables set FIREBASE_SERVICE_ACCOUNT='{"type":"service_account",...}'
 ```
 
