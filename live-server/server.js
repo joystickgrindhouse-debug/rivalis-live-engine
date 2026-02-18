@@ -10,6 +10,7 @@ const http = require('http');
 const axios = require('axios');
 const sessionManager = require('./game/sessionManager');
 const liveRoomsRouter = require('./api/liveRooms.routes');
+const botAdminRouter = require('./api/bots');
 
 // Discord Bot configuration
 const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 'http://localhost:5000';
@@ -27,6 +28,7 @@ const PORT = 8080; // Forced to 8080
 
 app.use(express.json());
 app.use(liveRoomsRouter);
+app.use(botAdminRouter); // Admin bot management endpoints
 
 // ============= HEALTH & INFO ENDPOINTS =============
 
