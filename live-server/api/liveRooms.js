@@ -1,6 +1,6 @@
 const { addDoc, updateDoc, deleteDoc, collection, doc } = require("firebase/firestore");
 const fetch = require("node-fetch"); // If using Node 18+, you can use global fetch
-const db = require("../yourFirestoreInstance"); // Replace with your Firestore instance
+const db = require("../firebase");
 
 // Create a live room and Discord VC
 async function createLiveRoomWithDiscordVC(roomData) {
