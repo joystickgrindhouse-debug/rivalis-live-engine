@@ -61,18 +61,7 @@ function calculateRaffleTickets(placement, repsAdded) {
   const baseTickets = { 1: 5, 2: 3, 3: 2 };
   const tickets = baseTickets[placement] || 1;
   // Bonus: 1 extra ticket per 10 reps
-  <rect x="850" y="300" width="200" height="120" fill="#16213e" rx="10"/>
-  <text x="950" y="330" font-size="28" text-anchor="middle" fill="#00FF00">🎯 SCORE</text>
-  <text x="950" y="385" font-size="40" font-weight="bold" text-anchor="middle" fill="#FFFFFF">${score}</text>
-  
-  <!-- Divider -->
-  <line x1="150" y1="470" x2="1050" y2="470" stroke="#00FF00" stroke-width="2" opacity="0.5"/>
-  
-  <!-- Footer -->
-  <text x="600" y="550" font-size="32" font-weight="bold" text-anchor="middle" fill="#FFFFFF">RIVALIS LIVE</text>
-  <text x="600" y="590" font-size="24" text-anchor="middle" fill="#00FF00">Competitive Fitness Gaming</text>
-</svg>
-  `.trim();
+  return tickets + Math.floor(repsAdded / 10);
 }
 
 /**
