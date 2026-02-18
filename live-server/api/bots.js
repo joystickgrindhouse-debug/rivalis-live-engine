@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const botProfileManager = require('../game/botProfileManager');
 const { getActiveSessions, createSession } = require('../game/sessionManager');
-const { addBotsToSession } = require('../../_archive_trimmed/live-server/game/botEngine');
+const { addBotsToSession } = require('../game/botEngine');
 
 // List all bots and their stats
 router.get('/api/bots', async (req, res) => {

@@ -1,11 +1,13 @@
-const { addDoc, updateDoc, deleteDoc, collection, doc } = require("firebase/firestore");
-const fetch = require("node-fetch"); // If using Node 18+, you can use global fetch
+const admin = require("firebase-admin");
 const db = require("../firebase");
+// Helper for Firestore collection
+const liveRoomsCollection = db.collection("liveRooms");
+const fetch = require("node-fetch"); // If using Node 18+, you can use global fetch
 
 // Create a live room and Discord VC
 async function createLiveRoomWithDiscordVC(roomData) {
   // 1. Create the room in Firestore
-  const docRef = await addDoc(collection(db, "liveRooms"), roomData);
+  const docRef = await liveRoomsCollection.add(roomData);
   const roomId = docRef.id;
 
   // 2. Create the Discord VC using the roomId as sessionId
@@ -19,7 +21,7 @@ async function createLiveRoomWithDiscordVC(roomData) {
 
   // 3. Store the inviteLink in the room document
   if (vcData.inviteLink) {
-    await updateDoc(docRef, { discordVcLink: vcData.inviteLink });
+    await liveRoomsCollection.doc(roomId).update({ discordVcLink: vcData.inviteLink });
   }
 
   return { roomId, discordVcLink: vcData.inviteLink || null };
@@ -35,7 +37,7 @@ async function deleteLiveRoomAndDiscordVC(roomId) {
     body: JSON.stringify({ sessionId: roomId })
   });
   // 2. Delete the Firestore room document
-  await deleteDoc(doc(db, "liveRooms", roomId));
+  await liveRoomsCollection.doc(roomId).delete();
 }
 
 module.exports = {
