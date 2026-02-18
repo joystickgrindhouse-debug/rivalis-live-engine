@@ -36,7 +36,7 @@ const activeChannels = new Map();
 
 // ============= DISCORD EVENTS =============
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   console.log(`\n🎙️ ===== RIVALIS DISCORD BOT =====`);
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   console.log(`🏢 Guild ID: ${DISCORD_GUILD_ID}`);

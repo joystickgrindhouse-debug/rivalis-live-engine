@@ -9,6 +9,7 @@ const express = require('express');
 const http = require('http');
 const axios = require('axios');
 const sessionManager = require('./game/sessionManager');
+const liveRoomsRouter = require('./api/liveRooms.routes');
 
 // Discord Bot configuration
 const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 'http://localhost:5000';
@@ -16,12 +17,16 @@ const DISCORD_BOT_URL = process.env.DISCORD_BOT_URL || 'http://localhost:5000';
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
+// Attach WebSocket for live chat/taunt
+const { attachWebSocket } = require('./sockets/liveChat');
+attachWebSocket(server);
 
 const PORT = 8080; // Forced to 8080
 
 // ============= MIDDLEWARE =============
 
 app.use(express.json());
+app.use(liveRoomsRouter);
 
 // ============= HEALTH & INFO ENDPOINTS =============
 

@@ -1,62 +1,100 @@
-# 🏋️ Rivalis Live - Production Multiplayer Fitness Game Server
+## 🔗 Discord VC Integration for Live Room Creation (Backend)
 
-A high-performance, modular Node.js multiplayer fitness gaming platform optimized for **Android Termux low-resource environments**. Built with WebSocket game engine and Discord voice integration.
+To integrate Discord voice channels with your live rooms, use the following logic in your backend (Node.js/Express) when handling Firestore room creation and deletion:
+
+### Create Room and Discord VC
+
+```js
+// 1. Create the room in Firestore
+const docRef = await addDoc(collection(db, "liveRooms"), roomData);
+const roomId = docRef.id;
+
+// 2. Create the Discord VC using the roomId as sessionId
+const discordBotUrl = process.env.DISCORD_BOT_URL || "http://localhost:5000";
+const createVcRes = await fetch(`${discordBotUrl}/create-vc`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ sessionId: roomId })
+});
+const vcData = await createVcRes.json();
+
+// 3. Store the inviteLink in the room document
+if (vcData.inviteLink) {
+  await updateDoc(docRef, { discordVcLink: vcData.inviteLink });
+}
+```
+
+### Delete Room and Discord VC
+
+```js
+// When deleting the room
+await fetch(`${discordBotUrl}/delete-vc`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ sessionId: roomId })
+});
+await deleteDoc(doc(db, "liveRooms", roomId));
+```
+
+**Summary:**
+- Use the Firestore-generated `roomId` as `sessionId` for Discord VC creation/deletion.
+- Store the `inviteLink` in the room document for frontend use.
+- Clean up the VC when the room is deleted.
+
+# 🏋️ Rivalis Live - Multiplayer Fitness Game Server (Session Backend)
+
+A high-performance, modular Node.js backend for multiplayer fitness gaming, optimized for **Android Termux low-resource environments**. Now acts as a session/room manager and Discord voice integration service. **All gameplay logic and validation is handled on the frontend (client or Hub).**
 
 ## 🎯 Architecture Overview
 
-The system is split into two independent services that communicate via HTTP locally:
+The system is split into two independent services:
 
 ```
 ┌─────────────────────────────────────────┐
-│     Client (WebSocket Connections)       │
+│           Client (Game Logic)           │
 └──────────────────┬──────────────────────┘
-                   │
-       ┌───────────┴───────────┐
-       ▼                       ▼
+             │
+     ┌───────────┴───────────┐
+     ▼                       ▼
 ┌──────────────┐        ┌──────────────┐
 │ Live Server  │◄─────►│ Discord Bot  │
 │   (8080)     │ HTTP  │   (5000)     │
 └──────────────┘       └──────────────┘
-   WebSocket            Voice Channel
-   Game Engine          Management
+ Session/Room           Voice Channel
+ Management             Management
 ```
+
+**Note:** All gameplay logic, validation, and state are now handled on the client/frontend. The backend only manages session/room lifecycle and Discord VC integration.
 
 ## ⚙️ Key Features
 
+
 ✅ **Performance Optimized**
-- All session state in-memory (no database queries during active sessions)
+- All session/room state in-memory (no database queries during active sessions)
 - Minimal object allocations per message
-- Memory-efficient Fisher-Yates deck shuffling
-- Rolling window anti-cheat (no full rep history stored)
 - No clustering, no Redis required
 
-✅ **Game Mechanics**
-- Turn-based multiplayer system with shuffled card deck
-- Card effects with timestamp-based expiration (no setTimeout spam)
-- Rep validation with anti-cheat detection
-- Automatic player elimination after 2 consecutive failed turns
-- Spectator mode for eliminated players
+✅ **Session Management Only**
+- No game logic, rep validation, or turn management on backend
+- All gameplay, validation, and anti-cheat handled by client/frontend
+
 
 ✅ **Security**
-- Firebase ID token verification before connection
-- Comprehensive rep validation (depth, form, time checks)
-- Anti-cheat suspicion scoring system
-- Replayed timestamp detection
-- Pattern detection for botting/autoclickers
+- Firebase ID token verification before connection (if enabled)
+- No sensitive game logic or validation on backend
+
 
 ✅ **Reliability**
-- WebSocket ping/pong heartbeat
 - Graceful disconnect handling
-- Automatic zombie connection cleanup
 - Session memory cleanup on disconnect
 - Crash protection with try/catch on all message parsing
+
 
 ✅ **Discord Integration**
 - Lightweight discord.js configuration
 - Temporary voice channels created per session
 - Automatic invite link generation
 - Channel cleanup on session end
-- Only Guilds intent required (minimal memory)
 
 ## 📋 Requirements
 
@@ -176,7 +214,7 @@ pm2 restart all
 pm2 stop all
 ```
 
-## 🎮 Game Flow
+## 🎮 Session Flow
 
 ### 1. Session Creation
 ```
@@ -184,82 +222,23 @@ POST /sessions
 → Returns sessionId
 ```
 
-### 2. Player Join
+### 2. Player Join & Gameplay
 ```
-WebSocket Connect + Bearer Token
-Message: { type: 'join_session', sessionId, playerName }
-```
-
-### 3. Session Start
-```
-POST /sessions/:sessionId/start
-→ Creates turn state, initializes deck
+All gameplay logic, validation, and state are handled on the client/frontend.
+Backend only manages session/room lifecycle and Discord VC.
 ```
 
-### 4. Rep Submission (During Active Turn)
-```
-Message: { 
-  type: 'submit_rep', 
-  rep: { 
-    depth, 
-    formScore, 
-    repTimeMs, 
-    timestamp 
-  } 
-}
-→ Server validates, applies card effects, updates score
-```
+<!--
+## 🎴 Card System (Client-side)
 
-### 5. Turn Advancement
-```
-POST /sessions/:sessionId/advance-turn
-→ Draws card, applies effect, broadcasts to players
-```
+*All card/turn logic is now handled on the client/frontend.*
+-->
 
-### 6. Elimination Check
-- Player fails 2 consecutive turns → eliminated
-- Becomes spectator (can view, can't submit reps)
-- Session ends when only 1 active player remains
+<!--
+## 🛡️ Anti-Cheat System (Client-side)
 
-## 🎴 Card System
-
-### Card Types
-- **FREEZE_OPPONENT**: Target can't submit reps for 2 turns
-- **DOUBLE_REPS**: Next rep counts as 2 reps
-- **STEAL_REP**: Rep count reduced for target
-- **REVERSE_ORDER**: Turn order reverses
-- **FORM_PENALTY**: Form threshold increased for target
-
-### Deck Management
-- 50 cards per deck (10 per type)
-- Fisher-Yates shuffle (in-place, O(n) memory)
-- Reshuffle from discard when draw empty
-- Timestamp-based effect expiration (~2 turns)
-
-## 🛡️ Anti-Cheat System
-
-### Validation Rules
-Each rep submission must pass:
-
-1. **Time Validation**
-   - 800ms - 3000ms per rep
-   - Client timestamp within 5 seconds of server
-   - Not within 100ms of last rep (replay prevention)
-
-2. **Depth & Form Validation**
-   - Depth ≥ 0.6 (60% of full range)
-   - Form ≥ 0.5 (50% of perfect form)
-   - Both normalized to 0-1 range
-
-3. **Pattern Detection** (Suspicion Scoring)
-   - Too fast reps (< 200ms between): +1 suspicion
-   - Unnaturally perfect forms (5+ consecutive 0.95+): +1 suspicion
-   - Suspicious depth drops (0.8 → 0.5): +1 suspicion
-   - **Auto-kick at 5+ suspicion points**
-
-4. **Rolling Window**
-   - Only last 50 reps analyzed (memory efficient)
-   - Suspicion decays by 1 per turn
+*All rep validation and anti-cheat logic is now handled on the client/frontend.*
+-->
 
 ## 📊 Performance Characteristics
 
@@ -280,12 +259,13 @@ Each rep submission must pass:
 
 ## 🔌 API Reference
 
+
 ### Live Server Endpoints
 
 #### Health Check
 ```
 GET /health
-→ { uptime, activeSessions, totalConnections, memoryUsage }
+→ { uptime, activeSessions, memoryUsage }
 ```
 
 #### Create Session
@@ -297,7 +277,7 @@ POST /sessions
 #### Get Session
 ```
 GET /sessions/:sessionId
-→ { sessionId, status, playerCount, stats }
+→ { sessionId, status }
 ```
 
 #### Start Session
@@ -306,55 +286,17 @@ POST /sessions/:sessionId/start
 → { success, sessionId }
 ```
 
-#### Advance Turn
-```
-POST /sessions/:sessionId/advance-turn
-→ { success, turnNumber, currentPlayer, drawnCard }
-```
-
 #### End Session
 ```
 POST /sessions/:sessionId/end
-→ { success, winnerId, leaderboard }
+→ { success, sessionId }
 ```
 
-### WebSocket Messages
+<!--
+### WebSocket Messages (Client-side)
 
-#### Join Session
-```json
-{
-  "type": "join_session",
-  "sessionId": "uuid...",
-  "playerName": "PlayerName"
-}
-```
-
-#### Submit Rep
-```json
-{
-  "type": "submit_rep",
-  "rep": {
-    "depth": 0.85,
-    "formScore": 0.92,
-    "repTimeMs": 1200,
-    "timestamp": 1707991234567
-  }
-}
-```
-
-#### Get Session Status
-```json
-{
-  "type": "get_session_status"
-}
-```
-
-#### Leave Session
-```json
-{
-  "type": "leave_session"
-}
-```
+*All gameplay and messaging is now handled on the client/frontend.*
+-->
 
 ### Discord Bot Endpoints
 
@@ -418,6 +360,7 @@ termux-job-scheduler --example
 free -h
 ```
 
+
 ## 🔧 Configuration Tuning
 
 Edit `live-server/config/limits.js`:
@@ -425,9 +368,6 @@ Edit `live-server/config/limits.js`:
 ```javascript
 // Adjust for your device capability
 MAX_CONCURRENT_PLAYERS: 30,      // Reduce if memory constrained
-TURN_TIME_MS: 120000,            // Increase for slower networks
-MIN_REP_TIME_MS: 800,            // Adjust based on exercise type
-MAX_REP_TIME_MS: 3000,           // Realistic max rep duration
 LIVE_SERVER_MEMORY_LIMIT_MB: 250, // PM2 restart threshold
 BOT_MEMORY_LIMIT_MB: 150,        // PM2 restart threshold
 ```
@@ -450,8 +390,7 @@ BOT_MEMORY_LIMIT_MB: 150,        // PM2 restart threshold
 - Ensure bot token is valid and not expired
 
 ### Sessions Not Ending
-- Check player elimination logic
-- Verify `checkSessionEnd` is called after reps
+- Ensure frontend/game client is calling session end API
 - Monitor console for errors
 
 ## 📈 Monitoring

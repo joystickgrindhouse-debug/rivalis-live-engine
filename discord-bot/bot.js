@@ -21,6 +21,12 @@ const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 const WINNER_ROLE_NAME = process.env.WINNER_ROLE_NAME || 'Champion';
 
 // Initialize Firebase
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  console.error('❌ ERROR: FIREBASE_SERVICE_ACCOUNT not found in .env file');
+  console.error('📝 Please add FIREBASE_SERVICE_ACCOUNT to discord-bot/.env');
+  process.exit(1);
+}
+
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
@@ -55,158 +61,6 @@ function calculateRaffleTickets(placement, repsAdded) {
   const baseTickets = { 1: 5, 2: 3, 3: 2 };
   const tickets = baseTickets[placement] || 1;
   // Bonus: 1 extra ticket per 10 reps
-  return tickets + Math.floor(repsAdded / 10);
-}
-
-// ============= SOCIAL SHARING HELPERS =============
-
-function generateShareText(username, placement, exercise, reps, score) {
-  const placements = {
-    1: '🥇 1st Place!',
-    2: '🥈 2nd Place!',
-    3: '🥉 3rd Place!',
-  };
-
-  return `I just crushed a Rivalis Live session! ${placements[placement] || `Finished in #${placement}!`}
-
-💪 Exercise: ${exercise}
-📊 Reps: ${reps}
-🎯 Score: ${score}
-
-Ready to compete? Join Rivalis Live! 🔗`;
-}
-
-function generateShareHashtags() {
-  return '#RivalisLive #FitnessChallenge #WorkoutGoals #CompetitiveFitness #ExerciseGaming #FitnessTech';
-}
-
-// ============= SOCIAL SHARE ENDPOINTS =============
-
-/**
- * Generate shareable match result
- * POST /share/generate
- * Body: { userId, username, placement, exercise, reps, score, sessionId }
- */
-app.post('/share/generate', async (req, res) => {
-  try {
-    const { userId, username, placement, exercise, reps, score, sessionId } = req.body;
-
-    if (!userId || !placement || !exercise) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const shareId = `share-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const shareText = generateShareText(username || 'A Rivalis Player', placement, exercise, reps || 0, score || 0);
-    const hashtags = generateShareHashtags();
-
-    // Save share to Firebase for analytics
-    await db.collection('shares').doc(shareId).set({
-      userId,
-      username,
-      placement,
-      exercise,
-      reps,
-      score,
-      sessionId,
-      shareText,
-      hashtags,
-      createdAt: new Date().toISOString(),
-      platform: 'pending',
-    });
-
-    // Generate share URLs for different platforms
-    const shareUrls = {
-      twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText + '\n\n' + hashtags)}&url=https://rivalislife.vercel.app`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=https://rivalislife.vercel.app&quote=${encodeURIComponent(shareText)}`,
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=https://rivalislife.vercel.app`,
-      reddit: `https://reddit.com/submit?url=https://rivalislife.vercel.app&title=${encodeURIComponent(shareText)}`,
-    };
-
-    // Generate preview image
-    const imageUrl = generateImageUrl(username, placement, exercise, reps, score);
-
-    res.json({
-      success: true,
-      shareId,
-      shareText,
-      hashtags,
-      shareUrls,
-      imageUrl,
-      copyText: `${shareText}\n\n${hashtags}`,
-      tiktokTemplate: `Caption: ${shareText}\nHashtags: ${hashtags}`,
-      instagramTemplate: `Caption: ${shareText}\n\nHashtags:\n${hashtags.split(' ').join('\n')}`,
-      embedImage: `<img src="${imageUrl}" alt="Rivalis Live Match Result" width="1200" height="630">`,
-    });
-  } catch (error) {
-    console.error('🔥 Error in share/generate:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ============= IMAGE GENERATION =============
-
-function generateImageUrl(username, placement, exercise, reps, score) {
-  // Using og-image.vercel.app for dynamic image generation
-  // Format: https://og-image.vercel.app/[text]
-  
-  const placementEmoji = ['', '🥇', '🥈', '🥉'][placement] || '🏆';
-  const text = `${placementEmoji} ${username} - ${exercise}`;
-  const subtext = `${reps} reps | ${score} score`;
-  
-  // Create image URL using a service
-  const imageParams = encodeURIComponent(`**${text}**\n${subtext}`);
-  
-  // Using og-image service (free tier available)
-  return `https://og-image.vercel.app/${imageParams}.png?theme=dark&md=1&fontSize=100px`;
-}
-
-function generateSVGCard(username, placement, exercise, reps, score) {
-  // Generate an SVG card for embedding
-  const placementText = {
-    1: { emoji: '🥇', text: '1ST PLACE', color: '#FFD700' },
-    2: { emoji: '🥈', text: '2ND PLACE', color: '#C0C0C0' },
-    3: { emoji: '🥉', text: '3RD PLACE', color: '#CD7F32' },
-  }[placement] || { emoji: '🏆', text: `${placement}TH PLACE`, color: '#00FF00' };
-
-  return `
-<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background -->
-  <rect width="1200" height="630" fill="#1a1a2e"/>
-  
-  <!-- Gradient overlay -->
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#16213e;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#0f3460;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <rect width="1200" height="630" fill="url(#grad)"/>
-  
-  <!-- Top bar -->
-  <rect width="1200" height="80" fill="${placementText.color}" opacity="0.2"/>
-  
-  <!-- Placement badge -->
-  <circle cx="100" cy="100" r="50" fill="${placementText.color}"/>
-  <text x="100" y="115" font-size="60" font-weight="bold" text-anchor="middle" fill="#000">${placementText.emoji}</text>
-  
-  <!-- Username -->
-  <text x="200" y="80" font-size="48" font-weight="bold" fill="#FFFFFF">${username}</text>
-  <text x="200" y="130" font-size="32" fill="#00FF00">${placementText.text}</text>
-  
-  <!-- Stats section -->
-  <text x="150" y="250" font-size="36" font-weight="bold" fill="#FFFFFF">MATCH STATS</text>
-  
-  <!-- Exercise -->
-  <rect x="150" y="300" width="350" height="120" fill="#16213e" rx="10"/>
-  <text x="325" y="330" font-size="28" text-anchor="middle" fill="#00FF00">💪 EXERCISE</text>
-  <text x="325" y="385" font-size="40" font-weight="bold" text-anchor="middle" fill="#FFFFFF">${exercise.toUpperCase()}</text>
-  
-  <!-- Reps -->
-  <rect x="550" y="300" width="250" height="120" fill="#16213e" rx="10"/>
-  <text x="675" y="330" font-size="28" text-anchor="middle" fill="#00FF00">📊 REPS</text>
-  <text x="675" y="385" font-size="40" font-weight="bold" text-anchor="middle" fill="#FFFFFF">${reps}</text>
-  
-  <!-- Score -->
   <rect x="850" y="300" width="200" height="120" fill="#16213e" rx="10"/>
   <text x="950" y="330" font-size="28" text-anchor="middle" fill="#00FF00">🎯 SCORE</text>
   <text x="950" y="385" font-size="40" font-weight="bold" text-anchor="middle" fill="#FFFFFF">${score}</text>
@@ -340,7 +194,7 @@ app.get('/share/history/:userId', async (req, res) => {
 
 // ============= DISCORD EVENTS =============
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`\n🎙️ ===== RIVALIS DISCORD BOT =====`);
   console.log(`✅ Bot logged in as ${client.user.tag}`);
   console.log(`🏢 Guild ID: ${DISCORD_GUILD_ID}`);
@@ -1095,6 +949,30 @@ function cleanupExpiredChannels() {
 }
 
 // ============= GRACEFUL SHUTDOWN =============
+// ============= INACTIVITY CLEANUP =============
+
+function cleanupInactiveChannels() {
+  const now = Date.now();
+  const maxInactivity = 5 * 60 * 1000; // 5 minutes
+
+  for (const [sessionId, info] of activeChannels.entries()) {
+    client.channels.fetch(info.channelId)
+      .then((channel) => {
+        if (channel && channel.type === 'GUILD_VOICE') {
+          // Check if channel is empty and older than 5 min
+          if (channel.members.size === 0 && now - info.createdAt > maxInactivity) {
+            channel.delete('Cleanup: Inactive for 5 min');
+            activeChannels.delete(sessionId);
+            console.log(`🗑️ Auto-deleted inactive channel: ${sessionId}`);
+          }
+        }
+      })
+      .catch(() => {});
+  }
+}
+
+// Run inactivity cleanup every minute
+setInterval(cleanupInactiveChannels, 60 * 1000);
 
 function gracefulShutdown(signal) {
   console.log(`\n📛 ${signal} received. Shutting down gracefully...`);

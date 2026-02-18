@@ -6,6 +6,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const LIMITS = require('../config/limits');
+const botProfileManager = require('../../live-server/game/botProfileManager');
 
 // Realistic human names pool
 const FIRST_NAMES = [
@@ -79,16 +80,20 @@ function generateAvatar(name) {
  * Create a bot player
  * Returns player object that can interact with game like real players
  */
-function createBotPlayer(index = 0) {
+async function createBotPlayer(index = 0) {
   const repEngine = require('./repEngine');
   const eliminationEngine = require('./eliminationEngine');
   const antiCheatEngine = require('./antiCheat');
 
   const name = generateUniqueName();
   const avatar = generateAvatar(name);
+  const botId = `bot_${uuidv4().substring(0, 8)}`;
+
+  // Create or load persistent profile
+  const profile = await botProfileManager.getOrCreateBotProfile(botId, name, avatar);
 
   return {
-    id: `bot_${uuidv4().substring(0, 8)}`,
+    id: botId,
     name,
     avatar,
     isBot: true,
@@ -103,6 +108,7 @@ function createBotPlayer(index = 0) {
       formVariance: 0.1,
       depthVariance: 0.15,
     },
+    profile, // Attach persistent profile
   };
 }
 
@@ -201,16 +207,14 @@ function calculateBotsNeeded(session, config) {
  * Add bots to a session
  * Returns array of added bot player IDs
  */
-function addBotsToSession(session, count) {
+async function addBotsToSession(session, count) {
   const addedBots = [];
 
   for (let i = 0; i < count; i++) {
-    const bot = createBotPlayer(i);
-
+    const bot = await createBotPlayer(i);
     session.players[bot.id] = bot;
     session.playerOrder.push(bot.id);
     addedBots.push(bot.id);
-
     console.log(`🤖 Bot added to session: ${bot.name} (${bot.id})`);
   }
 
@@ -220,24 +224,31 @@ function addBotsToSession(session, count) {
 /**
  * Execute bot turn (submit rep)
  * Called when it's a bot's turn during active session
+ * Updates bot stats after rep
  */
-function executeBotTurnAsync(bot, session, submitRepFunction) {
+async function executeBotTurnAsync(bot, session, submitRepFunction) {
   return new Promise((resolve) => {
-    // Simulate reaction time
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         // Generate realistic rep
         const repPayload = generateBotRep(bot.botConfig);
-
         // Submit through normal validation pipeline
         const result = submitRepFunction(session.id, bot.id, repPayload);
-
         if (result.valid) {
+          // Update bot stats in Firestore
+          const statUpdates = {
+            totalReps: (bot.profile?.stats?.totalReps || 0) + (result.repData.repsAdded || 0),
+            totalScore: (bot.profile?.stats?.totalScore || 0) + (result.repData.scoreAdded || 0),
+            bestScore: Math.max(bot.profile?.stats?.bestScore || 0, result.repData.scoreAdded || 0),
+            sessionsPlayed: (bot.profile?.stats?.sessionsPlayed || 0) + 1,
+            gamesWon: bot.profile?.stats?.gamesWon || 0, // Update elsewhere if bot wins
+            averageReps: 0, // Can be calculated as needed
+          };
+          await botProfileManager.updateBotStats(bot.id, statUpdates);
           console.log(`🤖 ${bot.name} submitted rep: +${result.repData.repsAdded} reps`);
         } else {
           console.log(`⚠️ ${bot.name} rep rejected: ${result.error}`);
         }
-
         resolve(result);
       } catch (error) {
         console.error(`🔥 Bot turn error for ${bot.name}:`, error.message);
